@@ -24,9 +24,12 @@ router.post('/register-tenant', (req, res) => {
   const slug = `${slugBase}-${Date.now().toString().slice(-4)}`;
 
   // 1. Create Tenant
+  const trialExpires = new Date();
+  trialExpires.setDate(trialExpires.getDate() + 7);
+
   const { lastId: tenantId } = dbRun(
-    'INSERT INTO tenants (name, slug, rif, address, phone, plan, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [business_name, slug, rif || '', address || '', phone || '', 'basico', 'activo']
+    'INSERT INTO tenants (name, slug, rif, address, phone, plan, status, plan_status, plan_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [business_name, slug, rif || '', address || '', phone || '', 'basico', 'activo', 'trial', trialExpires.toISOString()]
   );
 
   // 2. Create Admin User
@@ -54,7 +57,7 @@ router.post('/register-tenant', (req, res) => {
   res.status(201).json({
     token,
     user: { id: userId, name: admin_name, email: admin_email, role: 'admin', is_superadmin: 0 },
-    tenant: { id: tenantId, name: business_name, slug, plan: 'basico', status: 'activo' }
+    tenant: { id: tenantId, name: business_name, slug, plan: 'basico', status: 'activo', plan_status: 'trial', plan_expires_at: trialExpires.toISOString() }
   });
 });
 

@@ -176,6 +176,43 @@ async function runMigrations() {
     dbRun('INSERT INTO settings (tenant_id, key, value) VALUES (?, ?, ?)', [defaultTenantId, 'business_rif', 'J-12345678-9']);
   }
 
+  // 1. Add image column to products
+  try {
+    dbRun('ALTER TABLE products ADD COLUMN image TEXT;');
+  } catch (e) {}
+
+  // 2. Add plan_status and plan_expires_at to tenants
+  try {
+    dbRun("ALTER TABLE tenants ADD COLUMN plan_status TEXT DEFAULT 'trial';");
+  } catch (e) {}
+  
+  try {
+    dbRun('ALTER TABLE tenants ADD COLUMN plan_expires_at DATETIME;');
+  } catch (e) {}
+
+  // 3. Create payments table
+  dbRun(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      currency TEXT DEFAULT 'USD',
+      method TEXT NOT NULL,
+      reference TEXT,
+      proof_image TEXT,
+      plan TEXT NOT NULL,
+      status TEXT DEFAULT 'pendiente',
+      notes TEXT,
+      reviewed_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      reviewed_at DATETIME,
+      FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+    )
+  `);
+
+  // 4. Update the seed tenant to have plan_status='activo' and plan_expires_at far in future
+  dbRun("UPDATE tenants SET plan_status = 'activo', plan_expires_at = '2099-12-31T23:59:59.000Z' WHERE slug = 'demo';");
+
   saveDatabase();
 }
 

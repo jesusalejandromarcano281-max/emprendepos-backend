@@ -3,9 +3,11 @@ const router = express.Router();
 const { dbAll, dbGet, dbRun, saveDatabase } = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { tenantCheck } = require('../middleware/tenant');
+const { checkPlanActive, checkProductLimit } = require('../middleware/planRestrictions');
 
 router.use(auth);
 router.use(tenantCheck);
+router.use(checkPlanActive);
 
 const mapProduct = (p) => ({
   id: p.id,
@@ -15,7 +17,8 @@ const mapProduct = (p) => ({
   costo: p.cost,
   stock: p.stock,
   stock_minimo: p.min_stock,
-  categoria: p.category
+  categoria: p.category,
+  imagen: p.image || null
 });
 
 router.get('/', (req, res) => {
@@ -41,25 +44,27 @@ router.get('/:id', (req, res) => {
   res.json(mapProduct(product));
 });
 
-router.post('/', (req, res) => {
-  const { nombre, descripcion, precio, costo, stock, stock_minimo, categoria } = req.body;
+// POST - add checkProductLimit middleware
+router.post('/', checkProductLimit, (req, res) => {
+  const { nombre, descripcion, precio, costo, stock, stock_minimo, categoria, imagen } = req.body;
   if (!nombre || precio === undefined) {
     return res.status(400).json({ error: 'Faltan campos requeridos' });
   }
   const { lastId } = dbRun(
-    'INSERT INTO products (tenant_id, name, description, price, cost, stock, min_stock, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [req.tenantId, nombre, descripcion, precio, costo || 0, stock || 0, stock_minimo || 5, categoria || 'General']
+    'INSERT INTO products (tenant_id, name, description, price, cost, stock, min_stock, category, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [req.tenantId, nombre, descripcion, precio, costo || 0, stock || 0, stock_minimo || 5, categoria || 'General', imagen || null]
   );
   saveDatabase();
   const product = dbGet('SELECT * FROM products WHERE id = ?', [lastId]);
   res.status(201).json(mapProduct(product));
 });
 
+// PUT - add image support  
 router.put('/:id', (req, res) => {
-  const { nombre, descripcion, precio, costo, stock, stock_minimo, categoria } = req.body;
+  const { nombre, descripcion, precio, costo, stock, stock_minimo, categoria, imagen } = req.body;
   const { changes } = dbRun(
-    'UPDATE products SET name = ?, description = ?, price = ?, cost = ?, stock = ?, min_stock = ?, category = ?, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ?',
-    [nombre, descripcion, precio, costo || 0, stock, stock_minimo, categoria, req.tenantId, req.params.id]
+    'UPDATE products SET name = ?, description = ?, price = ?, cost = ?, stock = ?, min_stock = ?, category = ?, image = ?, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ?',
+    [nombre, descripcion, precio, costo || 0, stock, stock_minimo, categoria, imagen || null, req.tenantId, req.params.id]
   );
   if (changes === 0) return res.status(404).json({ error: 'Producto no encontrado' });
   saveDatabase();
