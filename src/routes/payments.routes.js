@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { dbGet, dbAll, dbRun } = require('../config/database');
-const auth = require('../middleware/auth');
-const tenantCheck = require('../middleware/tenant');
-const roleCheck = require('../middleware/roleCheck');
+const { auth } = require('../middleware/auth');
+const { tenantCheck } = require('../middleware/tenant');
+const { roleCheck } = require('../middleware/roleCheck');
 
-// GET /api/payments/methods - Devuelve los métodos de pago disponibles (Público/Auth no requiere tenant)
+// GET /api/payments/methods
 router.get('/methods', auth, (req, res) => {
   res.json({
     pago_movil: {
@@ -19,11 +19,11 @@ router.get('/methods', auth, (req, res) => {
   });
 });
 
-// GET /api/payments - Lista de pagos del tenant actual
-router.get('/', auth, tenantCheck, (req, res) => {
+// GET /api/payments
+router.get('/', auth, tenantCheck, async (req, res) => {
   try {
-    const payments = dbAll(
-      'SELECT * FROM payments WHERE tenant_id = ? ORDER BY created_at DESC',
+    const payments = await dbAll(
+      'SELECT * FROM payments WHERE tenant_id = $1 ORDER BY created_at DESC',
       [req.tenantId]
     );
     res.json(payments);
@@ -32,8 +32,8 @@ router.get('/', auth, tenantCheck, (req, res) => {
   }
 });
 
-// POST /api/payments - Crear un nuevo pago (subir comprobante)
-router.post('/', auth, tenantCheck, (req, res) => {
+// POST /api/payments
+router.post('/', auth, tenantCheck, async (req, res) => {
   const { amount, currency, method, reference, proof_image, plan, notes } = req.body;
 
   if (!amount || !method || !reference || !plan || !proof_image) {
@@ -41,9 +41,9 @@ router.post('/', auth, tenantCheck, (req, res) => {
   }
 
   try {
-    const { lastId } = dbRun(
-      \`INSERT INTO payments (tenant_id, amount, currency, method, reference, proof_image, plan, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)\`,
+    const { lastId } = await dbRun(
+      `INSERT INTO payments (tenant_id, amount, currency, method, reference, proof_image, plan, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
       [req.tenantId, amount, currency || 'USD', method, reference, proof_image, plan, notes || '']
     );
 
@@ -57,43 +57,43 @@ router.post('/', auth, tenantCheck, (req, res) => {
 // RUTAS SUPERADMIN
 // ==========================================
 
-// GET /api/payments/all - Listar todos los pagos (SuperAdmin)
-router.get('/all', auth, roleCheck('admin'), (req, res) => {
+// GET /api/payments/all
+router.get('/all', auth, roleCheck('admin'), async (req, res) => {
   if (req.user.is_superadmin !== 1) {
     return res.status(403).json({ error: 'Acceso denegado. Solo SuperAdmin.' });
   }
 
   try {
     const status = req.query.status;
-    let query = \`
+    let query = `
       SELECT p.*, t.name as tenant_name 
       FROM payments p 
       JOIN tenants t ON p.tenant_id = t.id
-    \`;
+    `;
     const params = [];
 
     if (status) {
-      query += ' WHERE p.status = ?';
+      query += ' WHERE p.status = $1';
       params.push(status);
     }
 
     query += ' ORDER BY p.created_at DESC';
 
-    const payments = dbAll(query, params);
+    const payments = await dbAll(query, params);
     res.json(payments);
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener pagos' });
   }
 });
 
-// PUT /api/payments/:id/approve - Aprobar pago (SuperAdmin)
-router.put('/:id/approve', auth, roleCheck('admin'), (req, res) => {
+// PUT /api/payments/:id/approve
+router.put('/:id/approve', auth, roleCheck('admin'), async (req, res) => {
   if (req.user.is_superadmin !== 1) {
     return res.status(403).json({ error: 'Acceso denegado. Solo SuperAdmin.' });
   }
 
   try {
-    const payment = dbGet('SELECT * FROM payments WHERE id = ?', [req.params.id]);
+    const payment = await dbGet('SELECT * FROM payments WHERE id = $1', [req.params.id]);
     if (!payment) {
       return res.status(404).json({ error: 'Pago no encontrado' });
     }
@@ -102,20 +102,17 @@ router.put('/:id/approve', auth, roleCheck('admin'), (req, res) => {
       return res.status(400).json({ error: 'El pago ya fue procesado' });
     }
 
-    // 1. Marcar pago como aprobado
-    dbRun(
-      'UPDATE payments SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?',
+    await dbRun(
+      'UPDATE payments SET status = $1, reviewed_by = $2, reviewed_at = CURRENT_TIMESTAMP WHERE id = $3',
       ['approved', req.user.id, payment.id]
     );
 
-    // 2. Actualizar plan del tenant (30 días)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
-    const expiresAtStr = expiresAt.toISOString();
 
-    dbRun(
-      'UPDATE tenants SET plan = ?, plan_status = ?, plan_expires_at = ? WHERE id = ?',
-      [payment.plan, 'active', expiresAtStr, payment.tenant_id]
+    await dbRun(
+      'UPDATE tenants SET plan = $1, plan_status = $2, plan_expires_at = $3 WHERE id = $4',
+      [payment.plan, 'active', expiresAt.toISOString(), payment.tenant_id]
     );
 
     res.json({ message: 'Pago aprobado y plan activado exitosamente' });
@@ -124,8 +121,8 @@ router.put('/:id/approve', auth, roleCheck('admin'), (req, res) => {
   }
 });
 
-// PUT /api/payments/:id/reject - Rechazar pago (SuperAdmin)
-router.put('/:id/reject', auth, roleCheck('admin'), (req, res) => {
+// PUT /api/payments/:id/reject
+router.put('/:id/reject', auth, roleCheck('admin'), async (req, res) => {
   if (req.user.is_superadmin !== 1) {
     return res.status(403).json({ error: 'Acceso denegado. Solo SuperAdmin.' });
   }
@@ -133,8 +130,8 @@ router.put('/:id/reject', auth, roleCheck('admin'), (req, res) => {
   const { notes } = req.body;
 
   try {
-    dbRun(
-      'UPDATE payments SET status = ?, notes = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?',
+    await dbRun(
+      'UPDATE payments SET status = $1, notes = $2, reviewed_by = $3, reviewed_at = CURRENT_TIMESTAMP WHERE id = $4',
       ['rejected', notes || 'Comprobante inválido', req.user.id, req.params.id]
     );
 

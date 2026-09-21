@@ -1,6 +1,6 @@
 const { dbGet } = require('../config/database');
 
-function tenantCheck(req, res, next) {
+async function tenantCheck(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: 'No autorizado' });
   }
@@ -16,18 +16,23 @@ function tenantCheck(req, res, next) {
     return res.status(403).json({ error: 'Usuario no asignado a ningún comercio' });
   }
 
-  const tenant = dbGet('SELECT * FROM tenants WHERE id = ?', [req.user.tenant_id]);
-  if (!tenant) {
-    return res.status(404).json({ error: 'Comercio no encontrado' });
-  }
+  try {
+    const tenant = await dbGet('SELECT * FROM tenants WHERE id = $1', [req.user.tenant_id]);
+    if (!tenant) {
+      return res.status(404).json({ error: 'Comercio no encontrado' });
+    }
 
-  if (tenant.status === 'suspendido') {
-    return res.status(403).json({ error: 'La suscripción de este comercio está suspendida. Por favor contacta al administrador.' });
-  }
+    if (tenant.status === 'suspendido') {
+      return res.status(403).json({ error: 'La suscripción de este comercio está suspendida. Por favor contacta al administrador.' });
+    }
 
-  req.tenantId = tenant.id;
-  req.tenant = tenant;
-  next();
+    req.tenantId = tenant.id;
+    req.tenant = tenant;
+    next();
+  } catch (err) {
+    console.error('Tenant check error', err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
 }
 
 module.exports = { tenantCheck };

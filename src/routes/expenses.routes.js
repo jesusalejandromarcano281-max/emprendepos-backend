@@ -15,98 +15,124 @@ const mapFinanceItem = (item) => ({
   fecha: item.date
 });
 
-const getExpensesHandler = (req, res) => {
-  const expenses = dbAll('SELECT * FROM expenses WHERE tenant_id = ? ORDER BY date DESC', [req.tenantId]);
-  res.json(expenses.map(mapFinanceItem));
+const getExpensesHandler = async (req, res) => {
+  try {
+    const expenses = await dbAll('SELECT * FROM expenses WHERE tenant_id = $1 ORDER BY date DESC', [req.tenantId]);
+    res.json(expenses.map(mapFinanceItem));
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
+  }
 };
 
 router.get('/', getExpensesHandler);
 router.get('/expenses', getExpensesHandler);
 
-const createExpenseHandler = (req, res) => {
-  const { descripcion, monto, categoria, fecha, description, amount, category, date } = req.body;
-  const desc = descripcion || description;
-  const amt = monto !== undefined ? monto : amount;
-  const cat = categoria || category || 'General';
-  const dt = fecha || date || new Date().toISOString().split('T')[0];
+const createExpenseHandler = async (req, res) => {
+  try {
+    const { descripcion, monto, categoria, fecha, description, amount, category, date } = req.body;
+    const desc = descripcion || description;
+    const amt = monto !== undefined ? monto : amount;
+    const cat = categoria || category || 'General';
+    const dt = fecha || date || new Date().toISOString().split('T')[0];
 
-  if (!desc || amt === undefined) {
-    return res.status(400).json({ error: 'Descripción y monto son requeridos' });
+    if (!desc || amt === undefined) {
+      return res.status(400).json({ error: 'Descripción y monto son requeridos' });
+    }
+
+    const { lastId } = await dbRun(
+      'INSERT INTO expenses (tenant_id, description, amount, category, date) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [req.tenantId, desc, amt, cat, dt]
+    );
+    if (typeof saveDatabase === 'function') saveDatabase();
+    const created = await dbGet('SELECT * FROM expenses WHERE id = $1', [lastId]);
+    res.status(201).json(mapFinanceItem(created));
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
   }
-
-  const { lastId } = dbRun(
-    'INSERT INTO expenses (tenant_id, description, amount, category, date) VALUES (?, ?, ?, ?, ?)',
-    [req.tenantId, desc, amt, cat, dt]
-  );
-  saveDatabase();
-  const created = dbGet('SELECT * FROM expenses WHERE id = ?', [lastId]);
-  res.status(201).json(mapFinanceItem(created));
 };
 
 router.post('/', createExpenseHandler);
 router.post('/expenses', createExpenseHandler);
 
-const deleteExpenseHandler = (req, res) => {
-  const { id } = req.params;
-  const { changes } = dbRun('DELETE FROM expenses WHERE tenant_id = ? AND id = ?', [req.tenantId, id]);
-  if (changes === 0) return res.status(404).json({ error: 'Gasto no encontrado' });
-  saveDatabase();
-  res.json({ message: 'Gasto eliminado' });
+const deleteExpenseHandler = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await dbRun('DELETE FROM expenses WHERE tenant_id = $1 AND id = $2', [req.tenantId, id]);
+    if (typeof saveDatabase === 'function') saveDatabase();
+    res.json({ message: 'Gasto eliminado' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
+  }
 };
 
 router.delete('/:id', deleteExpenseHandler);
 router.delete('/expenses/:id', deleteExpenseHandler);
 
 // Incomes
-router.get('/incomes', (req, res) => {
-  const incomes = dbAll('SELECT * FROM incomes WHERE tenant_id = ? ORDER BY date DESC', [req.tenantId]);
-  res.json(incomes.map(mapFinanceItem));
-});
-
-router.post('/incomes', (req, res) => {
-  const { descripcion, monto, categoria, fecha, description, amount, category, date } = req.body;
-  const desc = descripcion || description;
-  const amt = monto !== undefined ? monto : amount;
-  const cat = categoria || category || 'General';
-  const dt = fecha || date || new Date().toISOString().split('T')[0];
-
-  if (!desc || amt === undefined) {
-    return res.status(400).json({ error: 'Descripción y monto son requeridos' });
+router.get('/incomes', async (req, res) => {
+  try {
+    const incomes = await dbAll('SELECT * FROM incomes WHERE tenant_id = $1 ORDER BY date DESC', [req.tenantId]);
+    res.json(incomes.map(mapFinanceItem));
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
   }
-
-  const { lastId } = dbRun(
-    'INSERT INTO incomes (tenant_id, description, amount, category, date) VALUES (?, ?, ?, ?, ?)',
-    [req.tenantId, desc, amt, cat, dt]
-  );
-  saveDatabase();
-  const created = dbGet('SELECT * FROM incomes WHERE id = ?', [lastId]);
-  res.status(201).json(mapFinanceItem(created));
 });
 
-router.delete('/incomes/:id', (req, res) => {
-  const { id } = req.params;
-  const { changes } = dbRun('DELETE FROM incomes WHERE tenant_id = ? AND id = ?', [req.tenantId, id]);
-  if (changes === 0) return res.status(404).json({ error: 'Ingreso no encontrado' });
-  saveDatabase();
-  res.json({ message: 'Ingreso eliminado' });
+router.post('/incomes', async (req, res) => {
+  try {
+    const { descripcion, monto, categoria, fecha, description, amount, category, date } = req.body;
+    const desc = descripcion || description;
+    const amt = monto !== undefined ? monto : amount;
+    const cat = categoria || category || 'General';
+    const dt = fecha || date || new Date().toISOString().split('T')[0];
+
+    if (!desc || amt === undefined) {
+      return res.status(400).json({ error: 'Descripción y monto son requeridos' });
+    }
+
+    const { lastId } = await dbRun(
+      'INSERT INTO incomes (tenant_id, description, amount, category, date) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [req.tenantId, desc, amt, cat, dt]
+    );
+    if (typeof saveDatabase === 'function') saveDatabase();
+    const created = await dbGet('SELECT * FROM incomes WHERE id = $1', [lastId]);
+    res.status(201).json(mapFinanceItem(created));
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+router.delete('/incomes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await dbRun('DELETE FROM incomes WHERE tenant_id = $1 AND id = $2', [req.tenantId, id]);
+    if (typeof saveDatabase === 'function') saveDatabase();
+    res.json({ message: 'Ingreso eliminado' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
+  }
 });
 
 // Balance summary
-router.get('/balance', (req, res) => {
-  const totalSalesRes = dbGet("SELECT SUM(total) as sum FROM sales WHERE tenant_id = ? AND status = 'completed'", [req.tenantId]);
-  const totalExpensesRes = dbGet("SELECT SUM(amount) as sum FROM expenses WHERE tenant_id = ?", [req.tenantId]);
-  const totalIncomesRes = dbGet("SELECT SUM(amount) as sum FROM incomes WHERE tenant_id = ?", [req.tenantId]);
+router.get('/balance', async (req, res) => {
+  try {
+    const totalSalesRes = await dbGet("SELECT COALESCE(SUM(total), 0) as sum FROM sales WHERE tenant_id = $1 AND status = 'completed'", [req.tenantId]);
+    const totalExpensesRes = await dbGet("SELECT COALESCE(SUM(amount), 0) as sum FROM expenses WHERE tenant_id = $1", [req.tenantId]);
+    const totalIncomesRes = await dbGet("SELECT COALESCE(SUM(amount), 0) as sum FROM incomes WHERE tenant_id = $1", [req.tenantId]);
 
-  const totalSales = Number(totalSalesRes?.sum || 0);
-  const totalExpenses = Number(totalExpensesRes?.sum || 0);
-  const totalIncomes = Number(totalIncomesRes?.sum || 0);
-  const grandTotalIngresos = totalSales + totalIncomes;
+    const totalSales = Number(totalSalesRes.sum || 0);
+    const totalExpenses = Number(totalExpensesRes.sum || 0);
+    const totalIncomes = Number(totalIncomesRes.sum || 0);
+    const grandTotalIngresos = totalSales + totalIncomes;
 
-  res.json({
-    totalIngresos: grandTotalIngresos,
-    totalGastos: totalExpenses,
-    balance: grandTotalIngresos - totalExpenses
-  });
+    res.json({
+      totalIngresos: grandTotalIngresos,
+      totalGastos: totalExpenses,
+      balance: grandTotalIngresos - totalExpenses
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
+  }
 });
 
 module.exports = router;

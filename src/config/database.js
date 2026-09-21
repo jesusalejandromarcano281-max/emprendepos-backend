@@ -1,85 +1,64 @@
-const initSqlJs = require('sql.js');
-const fs = require('fs');
-const path = require('path');
+const { Pool } = require('pg');
 
-let db = null;
-const DB_DIR = path.join(__dirname, '../../data');
-const DB_PATH = path.join(DB_DIR, 'database.sqlite');
+let pool;
 
 async function initDatabase() {
-  const SQL = await initSqlJs();
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    console.warn("⚠️ No DATABASE_URL provided. Database connection might fail.");
   }
+  
+  pool = new Pool({
+    connectionString,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
 
-  if (fs.existsSync(DB_PATH)) {
-    const fileBuffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(fileBuffer);
-  } else {
-    db = new SQL.Database();
-    saveDatabase();
+  try {
+    const res = await pool.query('SELECT NOW()');
+    console.log('✅ Conectado a PostgreSQL en Supabase:', res.rows[0]);
+  } catch (err) {
+    console.error('❌ Error conectando a PostgreSQL:', err);
   }
-
-  // Auto-save every minute
-  setInterval(() => {
-    saveDatabase();
-  }, 60000);
-
-  // Auto-save on exit
-  process.on('exit', saveDatabase);
-  process.on('SIGINT', () => { saveDatabase(); process.exit(); });
 }
 
-function getDb() {
-  return db;
+async function dbRun(sql, params = []) {
+  try {
+    const res = await pool.query(sql, params);
+    // If it's an INSERT with RETURNING, return the lastId
+    if (res.rows && res.rows.length > 0 && res.rows[0].id) {
+       return { lastId: res.rows[0].id };
+    }
+    return { lastId: null };
+  } catch (err) {
+    console.error('Database Error in dbRun:', err, sql, params);
+    throw err;
+  }
+}
+
+async function dbGet(sql, params = []) {
+  try {
+    const res = await pool.query(sql, params);
+    return res.rows[0] || null;
+  } catch (err) {
+    console.error('Database Error in dbGet:', err, sql, params);
+    throw err;
+  }
+}
+
+async function dbAll(sql, params = []) {
+  try {
+    const res = await pool.query(sql, params);
+    return res.rows;
+  } catch (err) {
+    console.error('Database Error in dbAll:', err, sql, params);
+    throw err;
+  }
 }
 
 function saveDatabase() {
-  if (!db) return;
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(DB_PATH, buffer);
+  // Not needed for PostgreSQL
 }
 
-function dbAll(sql, params = []) {
-  const safeParams = params.map(p => p === undefined ? null : p);
-  const stmt = db.prepare(sql);
-  stmt.bind(safeParams);
-  const results = [];
-  while (stmt.step()) {
-    results.push(stmt.getAsObject());
-  }
-  stmt.free();
-  return results;
-}
-
-function dbGet(sql, params = []) {
-  const safeParams = params.map(p => p === undefined ? null : p);
-  const stmt = db.prepare(sql);
-  stmt.bind(safeParams);
-  let result;
-  if (stmt.step()) {
-    result = stmt.getAsObject();
-  }
-  stmt.free();
-  return result;
-}
-
-function dbRun(sql, params = []) {
-  const safeParams = params.map(p => p === undefined ? null : p);
-  db.run(sql, safeParams);
-  const lastIdRes = dbGet('SELECT last_insert_rowid() as id');
-  return {
-    changes: db.getRowsModified(),
-    lastId: lastIdRes ? lastIdRes.id : null
-  };
-}
-
-module.exports = {
-  initDatabase,
-  getDb,
-  saveDatabase,
-  dbAll,
-  dbGet,
-  dbRun
-};
+module.exports = { initDatabase, dbRun, dbGet, dbAll, saveDatabase };

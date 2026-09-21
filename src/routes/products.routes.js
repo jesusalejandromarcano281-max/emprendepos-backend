@@ -21,62 +21,86 @@ const mapProduct = (p) => ({
   imagen: p.image || null
 });
 
-router.get('/', (req, res) => {
-  let sql = 'SELECT * FROM products WHERE tenant_id = ?';
-  let params = [req.tenantId];
-  if (req.query.search) {
-    sql += ' AND (name LIKE ? OR category LIKE ?)';
-    const search = `%${req.query.search}%`;
-    params.push(search, search);
+router.get('/', async (req, res) => {
+  try {
+    let sql = 'SELECT * FROM products WHERE tenant_id = $1';
+    let params = [req.tenantId];
+    if (req.query.search) {
+      sql += ' AND (name LIKE $2 OR category LIKE $3)';
+      const search = `%${req.query.search}%`;
+      params.push(search, search);
+    }
+    const products = await dbAll(sql, params);
+    res.json(products.map(mapProduct));
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
   }
-  const products = dbAll(sql, params);
-  res.json(products.map(mapProduct));
 });
 
-router.get('/low-stock', (req, res) => {
-  const products = dbAll('SELECT * FROM products WHERE tenant_id = ? AND stock <= min_stock', [req.tenantId]);
-  res.json(products.map(mapProduct));
-});
-
-router.get('/:id', (req, res) => {
-  const product = dbGet('SELECT * FROM products WHERE tenant_id = ? AND id = ?', [req.tenantId, req.params.id]);
-  if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
-  res.json(mapProduct(product));
-});
-
-// POST - add checkProductLimit middleware
-router.post('/', checkProductLimit, (req, res) => {
-  const { nombre, descripcion, precio, costo, stock, stock_minimo, categoria, imagen } = req.body;
-  if (!nombre || precio === undefined) {
-    return res.status(400).json({ error: 'Faltan campos requeridos' });
+router.get('/low-stock', async (req, res) => {
+  try {
+    const products = await dbAll('SELECT * FROM products WHERE tenant_id = $1 AND stock <= min_stock', [req.tenantId]);
+    res.json(products.map(mapProduct));
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
   }
-  const { lastId } = dbRun(
-    'INSERT INTO products (tenant_id, name, description, price, cost, stock, min_stock, category, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [req.tenantId, nombre, descripcion, precio, costo || 0, stock || 0, stock_minimo || 5, categoria || 'General', imagen || null]
-  );
-  saveDatabase();
-  const product = dbGet('SELECT * FROM products WHERE id = ?', [lastId]);
-  res.status(201).json(mapProduct(product));
 });
 
-// PUT - add image support  
-router.put('/:id', (req, res) => {
-  const { nombre, descripcion, precio, costo, stock, stock_minimo, categoria, imagen } = req.body;
-  const { changes } = dbRun(
-    'UPDATE products SET name = ?, description = ?, price = ?, cost = ?, stock = ?, min_stock = ?, category = ?, image = ?, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ? AND id = ?',
-    [nombre, descripcion, precio, costo || 0, stock, stock_minimo, categoria, imagen || null, req.tenantId, req.params.id]
-  );
-  if (changes === 0) return res.status(404).json({ error: 'Producto no encontrado' });
-  saveDatabase();
-  const product = dbGet('SELECT * FROM products WHERE id = ?', [req.params.id]);
-  res.json(mapProduct(product));
+router.get('/:id', async (req, res) => {
+  try {
+    const product = await dbGet('SELECT * FROM products WHERE tenant_id = $1 AND id = $2', [req.tenantId, req.params.id]);
+    if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
+    res.json(mapProduct(product));
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
+  }
 });
 
-router.delete('/:id', (req, res) => {
-  const { changes } = dbRun('DELETE FROM products WHERE tenant_id = ? AND id = ?', [req.tenantId, req.params.id]);
-  if (changes === 0) return res.status(404).json({ error: 'Producto no encontrado' });
-  saveDatabase();
-  res.json({ message: 'Producto eliminado exitosamente' });
+// POST
+router.post('/', checkProductLimit, async (req, res) => {
+  try {
+    const { nombre, descripcion, precio, costo, stock, stock_minimo, categoria, imagen } = req.body;
+    if (!nombre || precio === undefined) {
+      return res.status(400).json({ error: 'Faltan campos requeridos' });
+    }
+    const { lastId } = await dbRun(
+      'INSERT INTO products (tenant_id, name, description, price, cost, stock, min_stock, category, image) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+      [req.tenantId, nombre, descripcion, precio, costo || 0, stock || 0, stock_minimo || 5, categoria || 'General', imagen || null]
+    );
+    if (typeof saveDatabase === 'function') saveDatabase();
+    const product = await dbGet('SELECT * FROM products WHERE id = $1', [lastId]);
+    res.status(201).json(mapProduct(product));
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// PUT
+router.put('/:id', async (req, res) => {
+  try {
+    const { nombre, descripcion, precio, costo, stock, stock_minimo, categoria, imagen } = req.body;
+    const { changes } = await dbRun(
+      'UPDATE products SET name = $1, description = $2, price = $3, cost = $4, stock = $5, min_stock = $6, category = $7, image = $8, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = $9 AND id = $10',
+      [nombre, descripcion, precio, costo || 0, stock, stock_minimo, categoria, imagen || null, req.tenantId, req.params.id]
+    );
+    if (changes === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    if (typeof saveDatabase === 'function') saveDatabase();
+    const product = await dbGet('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    res.json(mapProduct(product));
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const { changes } = await dbRun('DELETE FROM products WHERE tenant_id = $1 AND id = $2', [req.tenantId, req.params.id]);
+    if (changes === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    if (typeof saveDatabase === 'function') saveDatabase();
+    res.json({ message: 'Producto eliminado exitosamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error del servidor' });
+  }
 });
 
 module.exports = router;

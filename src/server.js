@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const { initDatabase } = require('./config/database');
 const { runMigrations } = require('./migrations/001_initial_schema');
-const { runMigration002 } = require('./migrations/002_add_payments_and_plan_status');
 
 const app = express();
 
@@ -24,7 +23,6 @@ const paymentsRoutes = require('./routes/payments.routes');
 async function startServer() {
   await initDatabase();
   await runMigrations();
-  await runMigration002();
 
   // Health check endpoint for cloud monitors (Render / Railway)
   app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
