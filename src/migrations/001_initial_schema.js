@@ -3,7 +3,7 @@ const { dbRun, dbGet } = require('../config/database');
 
 async function runMigrations() {
   // tenants table
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS tenants (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
@@ -17,10 +17,10 @@ async function runMigrations() {
       plan_expires_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
-  \`);
+  `);
 
   // users
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       tenant_id INTEGER,
@@ -32,10 +32,10 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(tenant_id) REFERENCES tenants(id)
     )
-  \`);
+  `);
 
   // products
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS products (
       id SERIAL PRIMARY KEY,
       tenant_id INTEGER NOT NULL,
@@ -51,10 +51,10 @@ async function runMigrations() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(tenant_id) REFERENCES tenants(id)
     )
-  \`);
+  `);
 
   // clients
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS clients (
       id SERIAL PRIMARY KEY,
       tenant_id INTEGER NOT NULL,
@@ -66,10 +66,10 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(tenant_id) REFERENCES tenants(id)
     )
-  \`);
+  `);
 
   // sales
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS sales (
       id SERIAL PRIMARY KEY,
       tenant_id INTEGER NOT NULL,
@@ -84,10 +84,10 @@ async function runMigrations() {
       FOREIGN KEY(client_id) REFERENCES clients(id),
       FOREIGN KEY(user_id) REFERENCES users(id)
     )
-  \`);
+  `);
 
   // sale_items
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS sale_items (
       id SERIAL PRIMARY KEY,
       sale_id INTEGER NOT NULL,
@@ -98,10 +98,10 @@ async function runMigrations() {
       FOREIGN KEY(sale_id) REFERENCES sales(id),
       FOREIGN KEY(product_id) REFERENCES products(id)
     )
-  \`);
+  `);
 
   // expenses
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS expenses (
       id SERIAL PRIMARY KEY,
       tenant_id INTEGER NOT NULL,
@@ -111,10 +111,10 @@ async function runMigrations() {
       category TEXT,
       FOREIGN KEY(tenant_id) REFERENCES tenants(id)
     )
-  \`);
+  `);
 
   // incomes
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS incomes (
       id SERIAL PRIMARY KEY,
       tenant_id INTEGER NOT NULL,
@@ -124,10 +124,10 @@ async function runMigrations() {
       category TEXT,
       FOREIGN KEY(tenant_id) REFERENCES tenants(id)
     )
-  \`);
+  `);
 
   // settings
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS settings (
       tenant_id INTEGER NOT NULL,
       key TEXT NOT NULL,
@@ -135,10 +135,10 @@ async function runMigrations() {
       PRIMARY KEY (tenant_id, key),
       FOREIGN KEY(tenant_id) REFERENCES tenants(id)
     )
-  \`);
+  `);
 
   // payments
-  await dbRun(\`
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS payments (
       id SERIAL PRIMARY KEY,
       tenant_id INTEGER NOT NULL,
@@ -156,7 +156,7 @@ async function runMigrations() {
       FOREIGN KEY(tenant_id) REFERENCES tenants(id),
       FOREIGN KEY(reviewed_by) REFERENCES users(id)
     )
-  \`);
+  `);
 
   // Seed default tenant
   const tenantExists = await dbGet('SELECT id FROM tenants WHERE slug = $1', ['demo']);
