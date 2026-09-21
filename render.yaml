@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: emprendepos-api
+    env: node
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://emprendepos.vercel.app
