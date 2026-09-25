@@ -41,10 +41,10 @@ router.post('/register-tenant', async (req, res) => {
     );
 
     // 3. Create Default Settings
-    await dbRun('INSERT INTO settings (tenant_id, key, value) VALUES ($1, $2, $3) RETURNING id', [tenantId, 'exchange_rate', '40.00']);
-    await dbRun('INSERT INTO settings (tenant_id, key, value) VALUES ($1, $2, $3) RETURNING id', [tenantId, 'business_name', business_name]);
-    if (rif) await dbRun('INSERT INTO settings (tenant_id, key, value) VALUES ($1, $2, $3) RETURNING id', [tenantId, 'business_rif', rif]);
-    if (address) await dbRun('INSERT INTO settings (tenant_id, key, value) VALUES ($1, $2, $3) RETURNING id', [tenantId, 'business_address', address]);
+    await dbRun('INSERT INTO settings (tenant_id, key, value) VALUES ($1, $2, $3)', [tenantId, 'exchange_rate', '40.00']);
+    await dbRun('INSERT INTO settings (tenant_id, key, value) VALUES ($1, $2, $3)', [tenantId, 'business_name', business_name]);
+    if (rif) await dbRun('INSERT INTO settings (tenant_id, key, value) VALUES ($1, $2, $3)', [tenantId, 'business_rif', rif]);
+    if (address) await dbRun('INSERT INTO settings (tenant_id, key, value) VALUES ($1, $2, $3)', [tenantId, 'business_address', address]);
 
     if (typeof saveDatabase === 'function') saveDatabase();
 
