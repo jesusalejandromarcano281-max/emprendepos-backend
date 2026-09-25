@@ -82,7 +82,29 @@ router.get('/all', auth, roleCheck('admin'), async (req, res) => {
     const payments = await dbAll(query, params);
     res.json(payments);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: 'Error al obtener pagos' });
+  }
+});
+
+// GET /api/payments/pending — alias for frontend SuperAdmin page
+router.get('/pending', auth, roleCheck('admin'), async (req, res) => {
+  if (req.user.is_superadmin !== 1) {
+    return res.status(403).json({ error: 'Acceso denegado. Solo SuperAdmin.' });
+  }
+
+  try {
+    const payments = await dbAll(`
+      SELECT p.*, t.name as tenant_name 
+      FROM payments p 
+      JOIN tenants t ON p.tenant_id = t.id
+      WHERE p.status = 'pending'
+      ORDER BY p.created_at DESC
+    `, []);
+    res.json(payments);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener pagos pendientes' });
   }
 });
 
