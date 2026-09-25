@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { initDatabase } = require('./config/database');
 const { runMigrations } = require('./migrations/001_initial_schema');
+const { runMigration003 } = require('./migrations/003_suppliers_schema');
 
 const app = express();
 
@@ -19,10 +20,12 @@ const expensesRoutes = require('./routes/expenses.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const saasRoutes = require('./routes/saas.routes');
 const paymentsRoutes = require('./routes/payments.routes');
+const suppliersRoutes = require('./routes/suppliers.routes');
 
 async function startServer() {
   await initDatabase();
   await runMigrations();
+  await runMigration003();
 
   // Health check endpoint for cloud monitors (Render / Railway)
   app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
@@ -35,6 +38,7 @@ async function startServer() {
   app.use('/api/sales', salesRoutes);
   app.use('/api/expenses', expensesRoutes);
   app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/suppliers', suppliersRoutes);
   app.use('/api/settings', require('./routes/settings.routes'));
 
   const { auth: authMiddleware } = require('./middleware/auth');

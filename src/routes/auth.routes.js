@@ -62,5 +62,30 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
+router.put('/change-password', auth, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'Faltan datos' });
+    }
+
+    const user = await dbGet('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    if (!bcrypt.compareSync(current_password, user.password)) {
+      return res.status(400).json({ error: 'Contraseña actual incorrecta' });
+    }
+
+    const hash = bcrypt.hashSync(new_password, 10);
+    const { dbRun } = require('../config/database');
+    await dbRun('UPDATE users SET password = $1 WHERE id = $2', [hash, req.user.id]);
+
+    res.json({ message: 'Contraseña actualizada exitosamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
 module.exports = router;
 
